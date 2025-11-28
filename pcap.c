@@ -6,7 +6,7 @@
 #include <stdio.h>
 
 extern pid_t pid;
-extern u16 icmp_seq;
+extern unsigned short icmp_seq;
 
 static char dev[IFNAMSIZ] = "eth0";
 static char* net;

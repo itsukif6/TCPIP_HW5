@@ -17,7 +17,7 @@
 #define STUDENT_ID "M143040001"
 
 pid_t pid;
-u16 icmp_seq = 0;
+unsigned short icmp_seq = 0;
 
 void print_usage(const char* prog_name)
 {
