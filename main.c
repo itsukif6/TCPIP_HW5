@@ -149,7 +149,10 @@ int main(int argc, char* argv[])
         // 11. 接收 ICMP Echo Reply（透過 pcap）
         // pcap_get_reply() 會在 timeout 時間內等待回應
         // 如果收到回應，會在函數內部印出 "Host X.X.X.X is alive"
-        pcap_get_reply();
+        int result = pcap_get_reply();
+        
+        // 添加小延遲避免發送過快
+        usleep(10000); // 10ms 延遲
     }
 
     // 12. 顯示掃描完成訊息

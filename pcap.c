@@ -1,6 +1,7 @@
 #include "pcap.h"
 #include <sys/types.h>
 #include <pcap/pcap.h>
+#include <pcap/dlt.h>
 #include <netinet/in.h>
 #include <string.h>
 #include <stdio.h>
@@ -72,9 +73,31 @@ void pcap_init(const char* interface_name, int timeout)
 int pcap_get_reply(void)
 {
     const u_char *ptr;
+    struct pcap_pkthdr header;
+    int datalink_type;
+    int datalink_offset;
+    
+    // 取得資料鏈路層類型
+    datalink_type = pcap_datalink(p);
+    
+    // 根據資料鏈路層類型決定偏移量
+    switch(datalink_type) {
+        case DLT_EN10MB:  // Ethernet
+            datalink_offset = 14;
+            break;
+        case DLT_LINUX_SLL:  // Linux cooked capture
+            datalink_offset = 16;
+            break;
+        case DLT_NULL:  // Loopback
+            datalink_offset = 4;
+            break;
+        default:
+            datalink_offset = 14;
+            break;
+    }
     
     // 嘗試抓取一個封包（會等待 timeout 時間）
-    ptr = pcap_next(p, &hdr);
+    ptr = pcap_next(p, &header);
     
     if (ptr == NULL) {
         // Timeout: 沒有收到任何封包
@@ -82,10 +105,26 @@ int pcap_get_reply(void)
     }
 
     // ptr 指向整個封包的開頭
-    // 封包結構: [Ethernet Header (14 bytes)][IP Header][ICMP Header][Data]
+    // 封包結構: [Data Link Header][IP Header][ICMP Header][Data]
     
-    // 跳過 Ethernet Header (14 bytes) 取得 IP Header
-    struct ip *ip_ptr = (struct ip *)(ptr + 14);
+    // 檢查封包長度是否足夠
+    if (header.caplen < datalink_offset + 20 + 8) {
+        // 封包太短，無效
+        return 0;
+    }
+    
+    // 跳過資料鏈路層 Header 取得 IP Header
+    struct ip *ip_ptr = (struct ip *)(ptr + datalink_offset);
+    
+    // 檢查是否為 IP 封包
+    if (ip_ptr->ip_v != 4) {
+        return 0;
+    }
+    
+    // 檢查是否為 ICMP 協定
+    if (ip_ptr->ip_p != IPPROTO_ICMP) {
+        return 0;
+    }
     
     // 計算 IP Header 長度（ip_hl 以 4 bytes 為單位）
     // 例如: ip_hl = 5 表示 IP Header 長度為 5 * 4 = 20 bytes
@@ -93,6 +132,11 @@ int pcap_get_reply(void)
     
     // 跳過 IP Header 取得 ICMP Header
     struct icmphdr *icmp_ptr = (struct icmphdr *)((char *)ip_ptr + ip_hdr_len);
+
+    // 檢查 ICMP 類型是否為 Echo Reply
+    if (icmp_ptr->type != ICMP_ECHOREPLY) {
+        return 0;
+    }
 
     // 檢查 ICMP Echo Reply 的 ID 是否為我們的 Process ID
     // 這樣可以確保收到的是我們發送的封包的回應
@@ -104,6 +148,7 @@ int pcap_get_reply(void)
     // 若符合條件，印出回覆來源 IP（表示該主機存活）
     // 輸出格式: "Host X.X.X.X is alive"
     printf("Host %s is alive\n", inet_ntoa(ip_ptr->ip_src));
+    fflush(stdout);  // 立即輸出
     
     return 1;
 }
