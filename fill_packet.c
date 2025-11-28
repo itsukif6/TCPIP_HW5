@@ -5,58 +5,57 @@
 #include <string.h>
 
 extern pid_t pid;
-extern unsigned short icmp_seq;
 
 void 
-fill_iphdr(struct ip *ip_hdr, const char* dst_ip)
+fill_iphdr ( struct ip *ip_hdr , const char* dst_ip)
 {
-    ip_hdr->ip_v = 4;                          // IPv4
-    ip_hdr->ip_hl = 5 + IP_OPTION_SIZE / 4;   // Header length (5 + 2 = 7 words)
-    ip_hdr->ip_tos = 0;                        // Type of service
-    ip_hdr->ip_len = htons(PACKET_SIZE);       // Total length
-    ip_hdr->ip_id = 0;                         // Identification = 0
-    ip_hdr->ip_off = htons(IP_DF);            // Don't fragment flag
-    ip_hdr->ip_ttl = 1;                        // TTL = 1 (stay in subnet)
-    ip_hdr->ip_p = IPPROTO_ICMP;              // Protocol = ICMP
-    ip_hdr->ip_sum = 0;                        // Checksum (OS will fill it)
-    ip_hdr->ip_dst.s_addr = inet_addr(dst_ip); // Destination IP
-    
-    // Source IP will be filled by kernel
-    ip_hdr->ip_src.s_addr = INADDR_ANY;
+    ip_hdr->ip_v = 4;
+    ip_hdr->ip_hl = 5; // Header length 20 bytes
+    ip_hdr->ip_tos = 0;
+    // Total Length: IP Header + ICMP Header + Data
+    ip_hdr->ip_len = htons(IP_header_len + ICMP_header_len + IP_option_len + Data_len); 
+    ip_hdr->ip_id = 0; 
+    ip_hdr->ip_off = htons(IP_DF); // Don't Fragment
+    ip_hdr->ip_ttl = 1; // 題目要求 TTL=1 
+    ip_hdr->ip_p = IPPROTO_ICMP;
+    ip_hdr->ip_sum = 0; // OS will calculate
+    ip_hdr->ip_src.s_addr = INADDR_ANY; // Let OS fill source IP
+    ip_hdr->ip_dst.s_addr = inet_addr(dst_ip);
 }
 
 void
-fill_icmphdr(struct icmphdr *icmp_hdr)
+fill_icmphdr (struct icmphdr *icmp_hdr)
 {
-    icmp_hdr->type = ICMP_ECHO;                // Type 8: Echo Request
-    icmp_hdr->code = 0;                        // Code 0
-    icmp_hdr->checksum = 0;                    // Will be calculated later
-    icmp_hdr->un.echo.id = htons(pid);        // Process ID
-    icmp_hdr->un.echo.sequence = htons(icmp_seq); // Sequence number
+    icmp_hdr->type = ICMP_ECHO; // Type 8 (Request)
+    icmp_hdr->code = 0;
+    icmp_hdr->un.echo.id = htons(pid); // ID 必須是 PID 
+    icmp_hdr->un.echo.sequence = 0; // 在 main loop 中會被覆蓋
+    icmp_hdr->checksum = 0;
+    
+    // 填入學號作為 Data
+    // icmp_hdr 結構後面緊接著 data，需要轉型指標
+    char *data = (char *)icmp_hdr + sizeof(struct icmphdr);
+    // TODO: 請將此處改為你的學號
+    strncpy(data, "M143040001", 10); 
 }
 
 u16
 fill_cksum(struct icmphdr* icmp_hdr)
 {
-    u16 *buf = (u16*)icmp_hdr;
-    int size = ICMP_PACKET_SIZE;
+    // 標準 Checksum 演算法
+    unsigned short *buf = (unsigned short *)icmp_hdr;
+    int len = ICMP_PACKET_SIZE; 
     unsigned long sum = 0;
-    
-    // Calculate checksum
-    while (size > 1) {
+
+    while (len > 1) {
         sum += *buf++;
-        size -= 2;
+        len -= 2;
+    }
+    if (len == 1) {
+        sum += *(unsigned char *)buf;
     }
     
-    // Add odd byte if exists
-    if (size == 1) {
-        sum += *(u8*)buf;
-    }
-    
-    // Fold 32-bit sum to 16 bits
-    while (sum >> 16) {
-        sum = (sum & 0xFFFF) + (sum >> 16);
-    }
-    
+    sum = (sum >> 16) + (sum & 0xFFFF);
+    sum += (sum >> 16);
     return (u16)(~sum);
 }

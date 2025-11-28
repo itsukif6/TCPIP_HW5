@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -Wall -g
-LDFLAGS = -lpcap
+LIBS = -lpcap
 
 TARGET = ipscanner
 OBJS = main.o fill_packet.o pcap.o
@@ -8,7 +8,7 @@ OBJS = main.o fill_packet.o pcap.o
 all: $(TARGET)
 
 $(TARGET): $(OBJS)
-	$(CC) $(CFLAGS) -o $(TARGET) $(OBJS) $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $(TARGET) $(OBJS) $(LIBS)
 
 main.o: main.c fill_packet.h pcap.h
 	$(CC) $(CFLAGS) -c main.c
@@ -16,10 +16,8 @@ main.o: main.c fill_packet.h pcap.h
 fill_packet.o: fill_packet.c fill_packet.h
 	$(CC) $(CFLAGS) -c fill_packet.c
 
-pcap.o: pcap.c pcap.h fill_packet.h
+pcap.o: pcap.c pcap.h
 	$(CC) $(CFLAGS) -c pcap.c
 
 clean:
-	rm -f $(OBJS) $(TARGET)
-
-.PHONY: all clean
+	rm -f $(TARGET) $(OBJS)
